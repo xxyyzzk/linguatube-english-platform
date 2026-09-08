@@ -1,0 +1,22 @@
+[project]
+name = "linguatube-english-platform"
+version = "0.1.0"
+description = "Local YouTube English learning platform with bilingual subtitles and SRT import/export."
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+    "yt-dlp>=2025.0.0",
+]
+
+[project.scripts]
+video-learning-platform = "video_learning_platform:main"
+
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools]
+py-modules = ["video_learning_platform"]
+
+[tool.uv]
+package = true
