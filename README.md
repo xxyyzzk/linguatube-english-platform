@@ -29,7 +29,7 @@ Do not open `english_video_platform/index.html` directly. The YouTube player and
 
 ## Shortcuts
 
-- `Space`: play / pause
+- `Space`: tap to play / pause, hold to play at 2x
 - `F`: fullscreen video with subtitles
 - `T`: theater mode
 - `+` / `-`: subtitle size

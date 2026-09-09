@@ -18,8 +18,11 @@ const DEFAULT_WATCH_SPLIT_RATIO = 33;
 const MIN_WATCH_SPLIT_RATIO = 22;
 const MAX_WATCH_SPLIT_RATIO = 52;
 const WATCH_SPLIT_KEYBOARD_STEP = 2;
+const DEFAULT_PLAYBACK_RATE = 1;
 const DEFAULT_VOLUME = 80;
 const VOLUME_KEYBOARD_STEP = 5;
+const SPACE_HOLD_FAST_RATE = 2;
+const SPACE_HOLD_DELAY_MS = 260;
 const AI_TRANSLATION_CACHE_VERSION = 2;
 const AI_PROVIDER_LABELS = {
   auto: "Auto",
@@ -2699,7 +2702,11 @@ const state = {
   playingFallback: false,
   fallbackTime: 0,
   fallbackStartedAt: 0,
-  playbackRate: 1,
+  playbackRate: DEFAULT_PLAYBACK_RATE,
+  spaceHoldTimer: null,
+  spaceHoldActive: false,
+  spaceHoldPreviousRate: DEFAULT_PLAYBACK_RATE,
+  spaceHoldWasPlaying: false,
   volume: sanitizeVolume(readStorage(storage.volume, null)),
   loopLine: false,
   shadowing: false,
@@ -2933,13 +2940,19 @@ function bindEvents() {
   document.addEventListener("fullscreenchange", updateFullscreenButton);
   document.addEventListener("webkitfullscreenchange", updateFullscreenButton);
   document.addEventListener("keydown", handleGlobalKeyboardShortcuts, { capture: true });
-  window.addEventListener("blur", restoreKeyboardFocusFromPlayer);
+  document.addEventListener("keyup", handleGlobalKeyboardKeyup, { capture: true });
+  window.addEventListener("blur", () => {
+    finishSpacePlaybackShortcut({ restoreOnly: true });
+    restoreKeyboardFocusFromPlayer();
+  });
+  document.addEventListener("visibilitychange", () => {
+    if (document.hidden) {
+      finishSpacePlaybackShortcut({ restoreOnly: true });
+    }
+  });
 
   elements.playbackRate?.addEventListener("change", () => {
-    state.playbackRate = Number(elements.playbackRate.value);
-    if (state.playerReady && state.player.setPlaybackRate) {
-      state.player.setPlaybackRate(state.playbackRate);
-    }
+    setPlaybackRate(Number(elements.playbackRate.value));
   });
 
   elements.timeline?.addEventListener("input", () => {
@@ -3332,17 +3345,7 @@ function handleGlobalKeyboardShortcuts(event) {
   }
 
   if (isSpacePlaybackShortcut(event)) {
-    if (shouldPreserveSpaceTyping(event.target)) {
-      return;
-    }
-
-    event.preventDefault();
-    event.stopPropagation();
-    blurPlaybackShortcutTarget(event.target);
-
-    if (!event.repeat) {
-      togglePlayback();
-    }
+    handleSpacePlaybackKeydown(event);
     return;
   }
 
@@ -3380,6 +3383,75 @@ function handleGlobalKeyboardShortcuts(event) {
 
   adjustCaptionScale(delta);
   event.preventDefault();
+}
+
+function handleGlobalKeyboardKeyup(event) {
+  if (!isSpacePlaybackShortcut(event)) {
+    return;
+  }
+  if (!state.spaceHoldTimer && !state.spaceHoldActive) {
+    return;
+  }
+
+  event.preventDefault();
+  event.stopPropagation();
+  finishSpacePlaybackShortcut();
+}
+
+function handleSpacePlaybackKeydown(event) {
+  if (shouldPreserveSpaceTyping(event.target)) {
+    return;
+  }
+
+  event.preventDefault();
+  event.stopPropagation();
+  blurPlaybackShortcutTarget(event.target);
+
+  if (event.repeat || state.spaceHoldTimer || state.spaceHoldActive) {
+    return;
+  }
+
+  state.spaceHoldTimer = window.setTimeout(startSpaceHoldFastPlayback, SPACE_HOLD_DELAY_MS);
+}
+
+function startSpaceHoldFastPlayback() {
+  state.spaceHoldTimer = null;
+  state.spaceHoldActive = true;
+  state.spaceHoldPreviousRate = sanitizePlaybackRate(state.playbackRate);
+  state.spaceHoldWasPlaying = isPlaying();
+
+  if (!state.spaceHoldWasPlaying) {
+    playVideo();
+  }
+  setPlaybackRate(SPACE_HOLD_FAST_RATE, { syncSelect: false });
+}
+
+function finishSpacePlaybackShortcut(options = {}) {
+  const restoreOnly = options.restoreOnly === true;
+
+  if (state.spaceHoldTimer) {
+    window.clearTimeout(state.spaceHoldTimer);
+    state.spaceHoldTimer = null;
+    if (!restoreOnly) {
+      togglePlayback();
+    }
+    return;
+  }
+
+  if (!state.spaceHoldActive) {
+    return;
+  }
+
+  const shouldPauseAfterHold = !state.spaceHoldWasPlaying;
+  const previousRate = state.spaceHoldPreviousRate;
+  state.spaceHoldActive = false;
+  state.spaceHoldWasPlaying = false;
+  state.spaceHoldPreviousRate = DEFAULT_PLAYBACK_RATE;
+  setPlaybackRate(previousRate);
+
+  if (shouldPauseAfterHold) {
+    pauseVideo();
+  }
 }
 
 function cueNavigationShortcutDelta(event) {
@@ -3797,6 +3869,27 @@ function sanitizeVolume(value) {
 function sanitizeWatchSplitRatio(value) {
   const ratio = Number(value);
   return roundTime(clamp(Number.isFinite(ratio) ? ratio : DEFAULT_WATCH_SPLIT_RATIO, MIN_WATCH_SPLIT_RATIO, MAX_WATCH_SPLIT_RATIO));
+}
+
+function sanitizePlaybackRate(value) {
+  const rate = Number(value);
+  return Number.isFinite(rate) && rate > 0 ? rate : DEFAULT_PLAYBACK_RATE;
+}
+
+function setPlaybackRate(value, options = {}) {
+  const rate = sanitizePlaybackRate(value);
+  if (state.playingFallback) {
+    state.fallbackTime = fallbackCurrentTime();
+    state.fallbackStartedAt = performance.now();
+  }
+
+  state.playbackRate = rate;
+  if (elements.playbackRate && options.syncSelect !== false) {
+    elements.playbackRate.value = String(rate);
+  }
+  if (state.playerReady && state.player?.setPlaybackRate) {
+    state.player.setPlaybackRate(rate);
+  }
 }
 
 function refreshIcons() {
@@ -4600,7 +4693,7 @@ function selectLesson(lessonId) {
   if (state.playerReady) {
     state.player.pauseVideo();
     state.player.cueVideoById(activeLesson().videoId, 0);
-    state.player.setPlaybackRate(state.playbackRate);
+    setPlaybackRate(state.playbackRate);
   }
   updatePlayButton();
   updatePlaybackFromTime(0);
