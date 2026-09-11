@@ -2736,6 +2736,7 @@ const state = {
   subtitleMergeDragIndex: null,
   savedVideosOpen: false,
   copyStatusTimer: null,
+  copyStatusCueIndex: null,
   srtImportStatusTimer: null,
   srtStatusTimer: null,
   sidebarCollapsed: initialSidebarCollapsed(),
@@ -5196,7 +5197,9 @@ function updateCaption() {
   elements.captionChinese.textContent = traditionalSubtitleText(cue);
   elements.practiceLine.textContent = cue.en;
   applyCaptionPosition();
-  resetCopyPracticeButton();
+  if (!state.copyStatusTimer || state.copyStatusCueIndex !== state.activeCueIndex) {
+    resetCopyPracticeButton();
+  }
 }
 
 function traditionalSubtitleText(cue) {
@@ -5583,7 +5586,7 @@ function updatePlayButton() {
 }
 
 async function copyPracticeLine() {
-  const text = elements.practiceLine.textContent.trim();
+  const text = currentPracticeCopyText();
   if (!text || text === "No subtitles loaded") {
     setCopyPracticeButtonState("No subtitles", "copy-x", "error");
     return;
@@ -5595,6 +5598,21 @@ async function copyPracticeLine() {
   } catch {
     setCopyPracticeButtonState("Copy failed", "copy-x", "error");
   }
+}
+
+function currentPracticeCopyText() {
+  const cue = activeCue();
+  const english = String(cue.en || "").trim();
+  if (english) {
+    return english;
+  }
+
+  const chinese = traditionalSubtitleText(cue).trim();
+  if (chinese) {
+    return chinese;
+  }
+
+  return elements.practiceLine?.textContent.trim() || "";
 }
 
 function downloadCurrentLessonSrt() {
@@ -5770,12 +5788,22 @@ async function writeClipboardText(text) {
 
 function fallbackCopyText(text) {
   const textarea = document.createElement("textarea");
+  const activeElement = document.activeElement;
+  const selection = document.getSelection();
+  const selectedRanges = [];
+
+  if (selection) {
+    for (let index = 0; index < selection.rangeCount; index += 1) {
+      selectedRanges.push(selection.getRangeAt(index));
+    }
+  }
+
   textarea.value = text;
   textarea.setAttribute("readonly", "");
-  textarea.style.left = "-1000px";
+  textarea.style.left = "0";
   textarea.style.opacity = "0";
   textarea.style.position = "fixed";
-  textarea.style.top = "-1000px";
+  textarea.style.top = "0";
   document.body.appendChild(textarea);
   textarea.focus();
   textarea.select();
@@ -5787,11 +5815,19 @@ function fallbackCopyText(text) {
     return false;
   } finally {
     textarea.remove();
+    if (selection) {
+      selection.removeAllRanges();
+      selectedRanges.forEach((range) => selection.addRange(range));
+    }
+    if (activeElement instanceof HTMLElement) {
+      activeElement.focus({ preventScroll: true });
+    }
   }
 }
 
 function setCopyPracticeButtonState(label, iconName, stateClass) {
   window.clearTimeout(state.copyStatusTimer);
+  state.copyStatusCueIndex = state.activeCueIndex;
   if (!elements.copyPracticeLine) {
     return;
   }
@@ -5808,6 +5844,8 @@ function setCopyPracticeButtonState(label, iconName, stateClass) {
 
 function resetCopyPracticeButton({ disabled = false } = {}) {
   window.clearTimeout(state.copyStatusTimer);
+  state.copyStatusTimer = null;
+  state.copyStatusCueIndex = null;
   if (!elements.copyPracticeLine) {
     return;
   }
