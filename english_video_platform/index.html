@@ -11,7 +11,7 @@
     <link rel="icon" href="data:,">
     <link rel="stylesheet" href="./styles.css?v=20260911-copy-fallback">
     <script defer src="https://unpkg.com/lucide@latest/dist/umd/lucide.min.js"></script>
-    <script defer src="./app.js?v=20260911-copy-fallback"></script>
+    <script defer src="./app.js?v=20260926-subtitle-shortcuts"></script>
   </head>
   <body>
     <div id="fileModeNotice" class="runtime-notice" hidden>
@@ -147,10 +147,10 @@
           <section class="subtitle-panel" aria-label="Synchronized subtitles">
             <div class="subtitle-toolbar">
               <div class="subtitle-modes" role="group" aria-label="Subtitle display mode">
-                <button class="mode-button active" type="button" data-mode="both">EN/ZH</button>
-                <button class="mode-button" type="button" data-mode="en">EN</button>
-                <button class="mode-button" type="button" data-mode="zh">ZH</button>
-                <button class="mode-button" type="button" data-mode="none" aria-label="No subtitles">OFF</button>
+                <button class="mode-button active" type="button" data-mode="both" aria-keyshortcuts="1" title="Shortcut: 1">EN/ZH</button>
+                <button class="mode-button" type="button" data-mode="en" aria-keyshortcuts="2" title="Shortcut: 2">EN</button>
+                <button class="mode-button" type="button" data-mode="zh" aria-keyshortcuts="3" title="Shortcut: 3">ZH</button>
+                <button class="mode-button" type="button" data-mode="none" aria-label="No subtitles" aria-keyshortcuts="4" title="Shortcut: 4">OFF</button>
               </div>
               <div class="subtitle-actions">
                 <button id="bookmarkLesson" class="ghost-button" type="button">

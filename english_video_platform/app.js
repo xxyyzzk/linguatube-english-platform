@@ -21,6 +21,7 @@ const WATCH_SPLIT_KEYBOARD_STEP = 2;
 const DEFAULT_PLAYBACK_RATE = 1;
 const DEFAULT_VOLUME = 80;
 const VOLUME_KEYBOARD_STEP = 5;
+const SUBTITLE_MODE_SHORTCUTS = ["both", "en", "zh", "none"];
 const SPACE_HOLD_FAST_RATE = 2;
 const SPACE_HOLD_DELAY_MS = 260;
 const AI_TRANSLATION_CACHE_VERSION = 2;
@@ -2970,9 +2971,7 @@ function bindEvents() {
 
   elements.modeButtons.forEach((button) => {
     button.addEventListener("click", () => {
-      state.subtitleMode = button.dataset.mode;
-      elements.modeButtons.forEach((modeButton) => modeButton.classList.toggle("active", modeButton === button));
-      updateSubtitleMode();
+      setSubtitleMode(button.dataset.mode);
     });
   });
 
@@ -3370,6 +3369,14 @@ function handleGlobalKeyboardShortcuts(event) {
     return;
   }
 
+  const shortcutMode = subtitleModeFromShortcut(event);
+  if (shortcutMode) {
+    event.preventDefault();
+    event.stopPropagation();
+    setSubtitleMode(shortcutMode);
+    return;
+  }
+
   const widthDelta = captionWidthShortcutDelta(event);
   if (widthDelta) {
     adjustCaptionWidth(widthDelta);
@@ -3498,6 +3505,31 @@ function volumeShortcutDelta(event) {
     return -VOLUME_KEYBOARD_STEP;
   }
   return 0;
+}
+
+function subtitleModeFromShortcut(event) {
+  const shortcutNumber = Number(event.key);
+  if (
+    Number.isInteger(shortcutNumber) &&
+    shortcutNumber >= 1 &&
+    shortcutNumber <= SUBTITLE_MODE_SHORTCUTS.length
+  ) {
+    return SUBTITLE_MODE_SHORTCUTS[shortcutNumber - 1];
+  }
+
+  const codeMatch = String(event.code || "").match(/^(?:Digit|Numpad)([1-4])$/);
+  return codeMatch ? SUBTITLE_MODE_SHORTCUTS[Number(codeMatch[1]) - 1] : "";
+}
+
+function setSubtitleMode(mode) {
+  if (!SUBTITLE_MODE_SHORTCUTS.includes(mode)) {
+    return;
+  }
+  state.subtitleMode = mode;
+  elements.modeButtons.forEach((button) => {
+    button.classList.toggle("active", button.dataset.mode === mode);
+  });
+  updateSubtitleMode();
 }
 
 function adjustVolume(delta) {
