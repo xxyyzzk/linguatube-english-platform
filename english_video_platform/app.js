@@ -4861,7 +4861,7 @@ function renderSubtitles() {
     `;
     updateSubtitleMode();
     updateAITranslateButton();
-    resetSrtDownloadButton({ disabled: true });
+    resetSrtDownloadButton({ disabled: !hasDownloadableSrtCues(lesson) });
     return;
   }
 
@@ -4874,7 +4874,7 @@ function renderSubtitles() {
   if (!matches.length) {
     elements.subtitleList.innerHTML = `<div class="empty-result">No matching subtitles</div>`;
     updateAITranslateButton();
-    resetSrtDownloadButton({ disabled: false });
+    resetSrtDownloadButton({ disabled: !hasDownloadableSrtCues(lesson) });
     return;
   }
 
@@ -4929,7 +4929,7 @@ function renderSubtitles() {
 
   updateSubtitleMode();
   updateAITranslateButton();
-  resetSrtDownloadButton({ disabled: false });
+  resetSrtDownloadButton({ disabled: !hasDownloadableSrtCues(lesson) });
   refreshIcons();
 }
 
@@ -5649,9 +5649,7 @@ function currentPracticeCopyText() {
 
 function downloadCurrentLessonSrt() {
   const lesson = activeLesson();
-  const entries = lesson.cues
-    .map((cue, index) => ({ cue, index, text: srtCueText(cue) }))
-    .filter(({ cue, text }) => !isPlaceholderCue(cue) && text);
+  const entries = downloadableSrtEntries(lesson);
 
   if (!entries.length) {
     setSrtDownloadButtonState("No subtitles", "file-x", "error");
@@ -5666,16 +5664,40 @@ function downloadCurrentLessonSrt() {
     })
     .join("\n\n");
 
-  const blob = new Blob([`\ufeff${srt}\n`], { type: "application/x-subrip;charset=utf-8" });
+  downloadTextFile({
+    fileName: `${safeFileName(lesson.title)}.srt`,
+    contents: `\ufeff${srt}\n`,
+    mimeType: "application/x-subrip;charset=utf-8",
+  });
+  setSrtDownloadButtonState("Downloaded", "check", "downloaded");
+}
+
+function downloadableSrtEntries(lesson) {
+  return (Array.isArray(lesson?.cues) ? lesson.cues : [])
+    .map((cue, index) => ({ cue, index, text: srtCueText(cue) }))
+    .filter(({ cue, text }) => !isPlaceholderCue(cue) && text);
+}
+
+function hasDownloadableSrtCues(lesson) {
+  return downloadableSrtEntries(lesson).length > 0;
+}
+
+function downloadTextFile({ fileName, contents, mimeType }) {
+  const blob = new Blob([contents], { type: mimeType });
   const url = URL.createObjectURL(blob);
   const link = document.createElement("a");
   link.href = url;
-  link.download = `${safeFileName(lesson.title)}.srt`;
+  link.download = fileName;
+  link.rel = "noopener";
+  link.style.display = "none";
   document.body.appendChild(link);
-  link.click();
-  link.remove();
-  window.setTimeout(() => URL.revokeObjectURL(url), 0);
-  setSrtDownloadButtonState("Downloaded", "check", "downloaded");
+
+  try {
+    link.click();
+  } finally {
+    link.remove();
+    window.setTimeout(() => URL.revokeObjectURL(url), 1000);
+  }
 }
 
 function srtCueText(cue) {
@@ -5789,7 +5811,7 @@ function setSrtDownloadButtonState(label, iconName, stateClass) {
   refreshIcons();
 
   state.srtStatusTimer = window.setTimeout(() => {
-    resetSrtDownloadButton({ disabled: !hasUsableCues(activeLesson()) });
+    resetSrtDownloadButton({ disabled: !hasDownloadableSrtCues(activeLesson()) });
   }, 1300);
 }
 
