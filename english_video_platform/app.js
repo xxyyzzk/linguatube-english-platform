@@ -4102,7 +4102,10 @@ async function fetchYouTubeLesson(url, { silent = false } = {}) {
 }
 
 async function hydrateLessonCaptions(lesson) {
-  if (lesson.importStatus || window.location.protocol === "file:" || !lessonNeedsHydration(lesson)) {
+  if (window.location.protocol === "file:" || !lessonNeedsHydration(lesson)) {
+    return;
+  }
+  if (["loading", "ready", "metadata-only"].includes(lesson.importStatus)) {
     return;
   }
 
