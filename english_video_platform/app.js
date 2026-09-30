@@ -5829,18 +5829,21 @@ function resetSrtDownloadButton({ disabled = false } = {}) {
 }
 
 async function writeClipboardText(text) {
-  if (navigator.clipboard?.writeText && window.isSecureContext) {
-    try {
-      await navigator.clipboard.writeText(text);
-      return;
-    } catch {
-      // Fall back below for browsers that expose Clipboard API but reject this write.
-    }
+  const normalizedText = String(text || "").trim();
+  if (!normalizedText) {
+    throw new Error("There is no text to copy.");
   }
 
-  if (!fallbackCopyText(text)) {
-    throw new Error("Copy command was rejected.");
+  if (fallbackCopyText(normalizedText)) {
+    return;
   }
+
+  if (navigator.clipboard?.writeText && window.isSecureContext) {
+    await navigator.clipboard.writeText(normalizedText);
+    return;
+  }
+
+  throw new Error("Copy command was rejected.");
 }
 
 function fallbackCopyText(text) {
@@ -5848,35 +5851,52 @@ function fallbackCopyText(text) {
   const activeElement = document.activeElement;
   const selection = document.getSelection();
   const selectedRanges = [];
+  let copiedViaEvent = false;
+
+  const handleCopy = (event) => {
+    if (!event.clipboardData) {
+      return;
+    }
+    event.preventDefault();
+    event.clipboardData.setData("text/plain", text);
+    copiedViaEvent = true;
+  };
 
   if (selection) {
     for (let index = 0; index < selection.rangeCount; index += 1) {
-      selectedRanges.push(selection.getRangeAt(index));
+      selectedRanges.push(selection.getRangeAt(index).cloneRange());
     }
   }
 
   textarea.value = text;
   textarea.setAttribute("readonly", "");
+  textarea.setAttribute("aria-hidden", "true");
+  textarea.style.border = "0";
+  textarea.style.height = "1px";
   textarea.style.left = "0";
   textarea.style.opacity = "0";
+  textarea.style.padding = "0";
   textarea.style.position = "fixed";
   textarea.style.top = "0";
+  textarea.style.width = "1px";
   document.body.appendChild(textarea);
-  textarea.focus();
+  textarea.focus({ preventScroll: true });
   textarea.select();
   textarea.setSelectionRange(0, textarea.value.length);
+  document.addEventListener("copy", handleCopy);
 
   try {
-    return document.execCommand("copy");
+    return document.execCommand("copy") || copiedViaEvent;
   } catch {
-    return false;
+    return copiedViaEvent;
   } finally {
+    document.removeEventListener("copy", handleCopy);
     textarea.remove();
     if (selection) {
       selection.removeAllRanges();
       selectedRanges.forEach((range) => selection.addRange(range));
     }
-    if (activeElement instanceof HTMLElement) {
+    if (activeElement instanceof HTMLElement && activeElement.isConnected) {
       activeElement.focus({ preventScroll: true });
     }
   }
